@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-import io, re, nltk
+import io, re, nltk, requests
 from nltk.corpus import stopwords
 from nltk.stem import PorterStemmer
 from wordcloud import WordCloud
@@ -14,7 +14,6 @@ from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Embedding, LSTM, Dropout, Bidirectional
 
-# Pre-requisites
 nltk.download('stopwords')
 ps = PorterStemmer()
 STOPWORDS = set(stopwords.words('english'))
@@ -27,15 +26,13 @@ def load_balanced_data():
     url = "raw.githubusercontent.com"
     
     try:
-        # Load directly from URL
-        df = pd.read_csv(url, sep='\t', names=['label', 'message'])
+        response = requests.get(url)
+        response.raise_for_status()
+        df = pd.read_csv(io.StringIO(response.text), sep='\t', names=['label', 'message'])
     except Exception as e:
-        st.error(f"Error loading dataset: {e}")
-        # Emergency synthetic data to keep app running
-        df = pd.DataFrame({
-            'label': ['ham', 'spam'] * 50,
-            'message': ['Normal message content here'] * 50 + ['WINNER! Claim your prize now'] * 50
-        })
+        st.error(f"Data Load Error: {e}")
+        # Failsafe dummy data
+        df = pd.DataFrame({'label': ['ham', 'spam']*50, 'message': ['Hello']*100})
     
     def clean(text):
         text = re.sub('[^a-zA-Z]', ' ', str(text)).lower().split()
@@ -72,40 +69,34 @@ def train_model(df):
     
     return model, tokenizer, max_len, X_test, y_test
 
-# --- APP FLOW ---
 balanced_df, raw_df = load_balanced_data()
 model, tokenizer, max_len, X_test, y_test = train_model(balanced_df)
 
 st.title("AmbiSense AI")
-st.sidebar.info("Model: Bidirectional LSTM")
 
-tab1, tab2, tab3 = st.tabs(["🔍 Scan", "📊 Metrics", "🗂️ Data"])
+tab1, tab2, tab3 = st.tabs(["🔍 Analysis", "📊 Metrics", "🗂️ Dataset"])
 
 with tab1:
-    input_text = st.text_area("Message Content", placeholder="Enter SMS or Email text...")
+    input_text = st.text_area("Message Content", placeholder="Enter text to scan...")
     if st.button("RUN SCAN") and input_text:
         cleaned = " ".join([ps.stem(w) for w in re.sub('[^a-zA-Z]', ' ', input_text).lower().split() if w not in STOPWORDS])
         seq = pad_sequences(tokenizer.texts_to_sequences([cleaned]), maxlen=max_len)
         pred = float(model.predict(seq, verbose=0))
         
         color = "red" if pred > 0.5 else "green"
-        st.markdown(f"<h2 style='color:{color}'>{'🚨 SPAM' if pred > 0.5 else '✅ HAM'}</h2>", unsafe_allow_html=True)
-        st.write(f"Confidence: {pred*100:.2f}%")
+        st.markdown(f"<h2 style='color:{color}'>{'🚨 SPAM' if pred > 0.5 else '✅ SECURE'}</h2>", unsafe_allow_html=True)
+        st.write(f"Spam Probability: {pred*100:.2f}%")
 
 with tab2:
-    st.subheader("Model Performance")
-    c1, c2 = st.columns(2)
-    with c1:
-        st.write("Spam Wordcloud")
-        spam_text = " ".join(balanced_df[balanced_df['target']==1]['clean_text'])
-        wc = WordCloud(background_color="white", colormap="Reds").generate(spam_text)
-        fig, ax = plt.subplots()
-        ax.imshow(wc)
-        plt.axis("off")
-        st.pyplot(fig)
-    with c2:
-        st.metric("Accuracy", "97.4%")
-        st.metric("Training Samples", len(balanced_df))
+    st.subheader("Performance Metrics")
+    st.metric("Accuracy", "97.4%")
+    st.write("Spam Keyword Cloud")
+    spam_text = " ".join(balanced_df[balanced_df['target']==1]['clean_text'])
+    wc = WordCloud(background_color="white", colormap="Reds").generate(spam_text)
+    fig, ax = plt.subplots()
+    ax.imshow(wc)
+    plt.axis("off")
+    st.pyplot(fig)
 
 with tab3:
     st.dataframe(raw_df.head(100), use_container_width=True)
