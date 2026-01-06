@@ -23,7 +23,7 @@ st.set_page_config(page_title="AmbiSense AI", layout="wide")
 @st.cache_data
 def load_balanced_data():
     # FIXED: Full absolute URL with https schema
-    url = "raw.githubusercontent.com"
+    url =  "https://raw.githubusercontent.com"
     
     try:
         response = requests.get(url)
@@ -100,3 +100,4 @@ with tab2:
 
 with tab3:
     st.dataframe(raw_df.head(100), use_container_width=True)
+
